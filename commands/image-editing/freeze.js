@@ -1,19 +1,30 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class FreezeCommand extends ImageCommand {
-  params() {
-    const frameCount = parseInt(this.args[0]);
+class FreezeCommand extends MediaCommand {
+  paramsFunc() {
+    const frameCount = this.getOptionInteger("endframe", true) ?? Number.parseInt(this.args[0]);
     return {
       loop: false,
-      frame: isNaN(frameCount) ? -1 : frameCount
+      frame: Number.isNaN(frameCount) ? -1 : frameCount,
     };
+  }
+
+  static init() {
+    super.init();
+    this.flags.push({
+      name: "endframe",
+      type: "integer",
+      description: "Set the end frame (default: last frame)",
+      minValue: 0,
+      classic: true,
+    });
+    return this;
   }
 
   static description = "Makes an image sequence only play once";
   static aliases = ["noloop", "once"];
-  static arguments = ["{end frame number}"];
 
-  static requiresGIF = true;
+  static alwaysGIF = true;
   static noImage = "You need to provide an image/GIF to freeze!";
   static command = "freeze";
 }

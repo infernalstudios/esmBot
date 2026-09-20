@@ -1,22 +1,25 @@
-import fs from "fs";
-import emojiRegex from "emoji-regex";
-import emoji from "node-emoji";
-import ImageCommand from "../../classes/imageCommand.js";
+import fs from "node:fs";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class FlagCommand extends ImageCommand {
+class FlagCommand extends MediaCommand {
   flagPath = "";
 
   async criteria() {
-    if (!this.args[0].match(emojiRegex)) return false;
-    const flag = emoji.unemojify(this.args[0]).replaceAll(":", "").replace("flag-", "");
-    let path = `./assets/images/region-flags/png/${flag.toUpperCase()}.png`;
-    if (flag === "pirate_flag") path = "./assets/images/pirateflag.png";
-    if (flag === "rainbow-flag") path = "./assets/images/rainbowflag.png";
-    if (flag === "checkered_flag") path = "./assets/images/checkeredflag.png";
-    if (flag === "transgender_flag") path = "./assets/images/transflag.png";
-    if (this.args[0] === "🏴󠁧󠁢󠁳󠁣󠁴󠁿") path = "./assets/images/region-flags/png/GB-SCT.png";
-    if (this.args[0] === "🏴󠁧󠁢󠁷󠁬󠁳󠁿") path = "./assets/images/region-flags/png/GB-WLS.png";
-    if (this.args[0] === "🏴󠁧󠁢󠁥󠁮󠁧󠁿") path = "./assets/images/region-flags/png/GB-ENG.png";
+    const text = this.getOptionString("text") ?? this.args[0];
+    const matched = text.match(/\p{RGI_Emoji_Flag_Sequence}|\p{RGI_Emoji_Tag_Sequence}|🏴‍☠️|🏳️‍🌈|🏁|🏳️‍⚧️/gv);
+    if (!matched) return false;
+    let path;
+    if (matched[0] === "🏴󠁧󠁢󠁳󠁣󠁴󠁿") path = "assets/images/region-flags/png/GB-SCT.png";
+    if (matched[0] === "🏴󠁧󠁢󠁷󠁬󠁳󠁿") path = "assets/images/region-flags/png/GB-WLS.png";
+    if (matched[0] === "🏴󠁧󠁢󠁥󠁮󠁧󠁿") path = "assets/images/region-flags/png/GB-ENG.png";
+    if (matched[0] === "🏴‍☠️") path = "assets/images/pirateflag.png";
+    if (matched[0] === "🏳️‍🌈") path = "assets/images/rainbowflag.png";
+    if (matched[0] === "🏁") path = "assets/images/checkeredflag.png";
+    if (matched[0] === "🏳️‍⚧️") path = "assets/images/transflag.png";
+    if (!path) {
+      const flag = this.ccFromFlag(matched[0]);
+      path = `assets/images/region-flags/png/${flag?.toUpperCase()}.png`;
+    }
     try {
       await fs.promises.access(path);
       this.flagPath = path;
@@ -26,17 +29,35 @@ class FlagCommand extends ImageCommand {
     }
   }
 
-  params() {
+  /**
+   * @param {string} flag
+   */
+  ccFromFlag(flag) {
+    const codepoints = [...flag].map((c) => {
+      const codepoint = c.codePointAt(0);
+      if (!codepoint) throw Error("Missing codepoint");
+      return codepoint - 127397;
+    });
+    if (codepoints.find((v) => v < 65 || v > 90)) return;
+    return String.fromCodePoint(...codepoints);
+  }
+
+  paramsFunc() {
     return {
-      overlay: this.flagPath
+      overlay: this.flagPath,
     };
   }
 
-  static description = "Overlays a flag onto an image";
-  static arguments = ["[flag]"];
+  static init() {
+    super.init();
+    this.addTextParam();
+    return this;
+  }
 
-  static requiresText = true;
-  static noText = "You need to provide an emoji of a flag to overlay!";
+  static description = "Overlays a flag onto an image";
+
+  static requiresParam = true;
+  static noParam = "You need to provide an emoji of a flag to overlay!";
   static noImage = "You need to provide an image/GIF to overlay a flag onto!";
   static command = "flag";
 }

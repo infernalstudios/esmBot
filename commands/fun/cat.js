@@ -1,27 +1,24 @@
-import fetch from "node-fetch";
-import Command from "../../classes/command.js";
+import Command from "#cmd-classes/command.js";
 
 class CatCommand extends Command {
   async run() {
-    this.client.sendChannelTyping(this.message.channel.id);
-    const controller = new AbortController(); // eslint-disable-line no-undef
+    await this.acknowledge();
+    const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
     }, 15000);
     try {
-      const data = await fetch("https://projectlounge.pw/cta/", { redirect: "manual", signal: controller.signal });
+      const data = await fetch("https://files.esmbot.net/cta", {
+        method: "HEAD",
+        signal: controller.signal,
+        redirect: "manual",
+      });
       clearTimeout(timeout);
-      return {
-        embeds: [{
-          color: 16711680,
-          image: {
-            url: data.headers.get("location")
-          }
-        }]
-      };
+      return `https://files.esmbot.net${data.headers.get("location")}`;
     } catch (e) {
-      if (e.name === "AbortError") {
-        return "I couldn't get a cat image in time. Maybe try again?";
+      if (e instanceof DOMException && e.name === "AbortError") {
+        this.success = false;
+        return this.getString("commands.responses.cat.error");
       }
     }
   }

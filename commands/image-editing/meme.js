@@ -1,30 +1,57 @@
-import ImageCommand from "../../classes/imageCommand.js";
-const allowedFonts = ["futura", "impact", "helvetica", "arial", "roboto", "noto", "times"];
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class MemeCommand extends ImageCommand {
-  params(url) {
-    const newArgs = this.args.filter(item => !item.includes(url));
-    const [topText, bottomText] = newArgs.join(" ").split(/(?<!\\),/).map(elem => elem.trim());
+class MemeCommand extends MediaCommand {
+  /**
+   * @param {string} text
+   */
+  async criteria(text) {
+    if (typeof text !== "string") return false;
+    const [topText, bottomText] = text.split(/(?<!\\),/).map((elem) => elem.trim());
+    if (topText === "" && (!bottomText || bottomText === "")) return false;
+    return true;
+  }
+
+  paramsFunc() {
+    const newArgs = this.getOptionString("text") ?? this.args.join(" ");
+    const [topText, bottomText] = newArgs.split(/(?<!\\),/).map((elem) => elem.trim());
+    const font = this.getOptionString("font");
     return {
-      top: (this.specialArgs.case ? topText : topText.toUpperCase()).replaceAll("&", "\\&amp;").replaceAll(">", "\\&gt;").replaceAll("<", "\\&lt;").replaceAll("\"", "\\&quot;").replaceAll("'", "\\&apos;").replaceAll("%", "\\%"),
-      bottom: bottomText ? (this.specialArgs.case ? bottomText : bottomText.toUpperCase()).replaceAll("&", "\\&amp;").replaceAll(">", "\\&gt;").replaceAll("<", "\\&lt;").replaceAll("\"", "\\&quot;").replaceAll("'", "\\&apos;").replaceAll("%", "\\%") : "",
-      font: this.specialArgs.font && allowedFonts.includes(this.specialArgs.font.toLowerCase()) ? this.specialArgs.font.toLowerCase() : "impact"
+      topText: this.clean(this.getOptionBoolean("case") ? topText : topText.toUpperCase()),
+      bottomText: bottomText ? this.clean(this.getOptionBoolean("case") ? bottomText : bottomText.toUpperCase()) : "",
+      // @ts-expect-error this.constructor allows us to get static properties, but TS interprets it as a pure function
+      font: font && this.constructor.allowedFonts.includes(font.toLowerCase()) ? font.toLowerCase() : "impact",
     };
   }
 
-  static description = "Generates a meme from an image (separate top/bottom text with a comma)";
-  static arguments = ["[top text]", "{bottom text}"];
-  static flags = [{
-    name: "case",
-    description: "Make the meme text case-sensitive (allows for lowercase text)"
-  }, {
-    name: "font",
-    type: allowedFonts.join("|"),
-    description: "Specify the font you want to use (default: `impact`)"
-  }];
+  static init() {
+    super.init();
+    this.addTextParam();
+    this.flags.push(
+      {
+        name: "case",
+        description: "Make the meme text case-sensitive (allows for lowercase text)",
+        type: "boolean",
+      },
+      {
+        name: "font",
+        type: "string",
+        choices: (() => {
+          const array = [];
+          for (const font of this.allowedFonts) {
+            array.push({ name: font, value: font });
+          }
+          return array;
+        })(),
+        description: "Specify the font you want to use (default: impact)",
+      },
+    );
+    return this;
+  }
 
-  static requiresText = true;
-  static noText = "You need to provide some text to generate a meme!";
+  static description = "Generates a meme from an image (separate top/bottom text with a comma)";
+
+  static requiresParam = true;
+  static noParam = "You need to provide some text to generate a meme!";
   static noImage = "You need to provide an image/GIF to generate a meme!";
   static command = "meme";
 }

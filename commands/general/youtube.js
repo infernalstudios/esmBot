@@ -1,26 +1,79 @@
-import fetch from "node-fetch";
-import { readFileSync } from "fs";
-const { searx } = JSON.parse(readFileSync(new URL("../../servers.json", import.meta.url)));
-import { random } from "../../utils/misc.js";
-import paginator from "../../utils/pagination/pagination.js";
-import Command from "../../classes/command.js";
+import Command from "#cmd-classes/command.js";
+import serversConfig from "#config/servers.json" with { type: "json" };
+import paginator from "#pagination";
+import logger from "#utils/logger.js";
+import { random } from "#utils/misc.js";
 
 class YouTubeCommand extends Command {
   async run() {
-    if (this.args.length === 0) return "You need to provide something to search for!";
-    this.client.sendChannelTyping(this.message.channel.id);
+    const query = this.getOptionString("query") ?? this.args.join(" ");
+    this.success = false;
+    if (!query || !query.trim()) return this.getString("commands.responses.youtube.noInput");
+    await this.acknowledge();
     const messages = [];
-    const videos = await fetch(`${random(searx)}/search?format=json&safesearch=1&categories=videos&q=!youtube%20${encodeURIComponent(this.args.join(" "))}`).then(res => res.json());
-    if (videos.results.length === 0) return "I couldn't find any results!";
-    for (const [i, value] of videos.results.entries()) {
-      messages.push({ content: `Page ${i + 1} of ${videos.results.length}\n<:youtube:637020823005167626> **${value.title.replaceAll("*", "\\*")}**\nUploaded by **${value.author.replaceAll("*", "\\*")}**\n${value.url}` });
+    let server = random(serversConfig.search);
+    if (!server) {
+      if (!serversConfig.searx && serversConfig.searx.length === 0)
+        return this.getString("commands.responses.youtube.noEngines");
+      logger.warn('!!! THE "searx" FIELD IN config/servers.json IS DEPRECATED !!!');
+      logger.warn(
+        'The "searx" field has been renamed to "search" and has a different format. Please update your config; esmBot will no longer read this field in a future version.',
+      );
+      server = {
+        type: "searxng",
+        url: random(serversConfig.searx),
+      };
     }
-    return paginator(this.client, this.message, messages);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 6000);
+    /**
+     * @type {import("#utils/types.ts").SearXNGResults}
+     */
+    const videos = await fetch(
+      new URL(
+        server.type === "degoog"
+          ? `/api/command?format=json&safeMode=on&q=!youtube_noapi%20${encodeURIComponent(query)}` // relies on searxng compatibility mode with the "Youtube Noapi" engine installed/enabled
+          : `/search?format=json&safesearch=2&categories=videos&q=!youtube%20${encodeURIComponent(query)}`,
+        server.url,
+      ),
+      {
+        signal: controller.signal,
+      },
+    ).then((res) => res.json());
+    clearTimeout(timeout);
+    if (videos.results.length === 0) return this.getString("commands.responses.youtube.noResults");
+    for (const [i, value] of videos.results.entries()) {
+      messages.push({
+        content: `${this.getString("pagination.page", {
+          params: {
+            page: (i + 1).toString(),
+            amount: videos.results.length.toString(),
+          },
+        })}\n▶️ **${value.title.replaceAll("*", "\\*")}**${server.type === "degoog" ? "" : `\nUploaded by **${value.author?.replaceAll("*", "\\*") ?? "N/A"}**`}\n${value.url}`,
+      });
+    }
+    this.success = true;
+    return paginator(
+      this.client,
+      { message: this.message, interaction: this.interaction, author: this.author },
+      messages,
+    );
   }
+
+  static flags = [
+    {
+      name: "query",
+      type: "string",
+      description: "The query you want to search for",
+      classic: true,
+      required: true,
+    },
+  ];
 
   static description = "Searches YouTube";
   static aliases = ["yt", "video", "ytsearch"];
-  static arguments = ["[query]"];
 }
 
 export default YouTubeCommand;

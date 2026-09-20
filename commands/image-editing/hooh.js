@@ -1,8 +1,8 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class HooHCommand extends ImageCommand {
+class HooHCommand extends MediaCommand {
   params = {
-    vertical: true
+    vertical: true,
   };
 
   static description = "Mirrors the bottom of an image onto the top";

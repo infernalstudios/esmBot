@@ -1,8 +1,8 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class BlurCommand extends ImageCommand {
+class BlurCommand extends MediaCommand {
   params = {
-    sharp: false
+    sharp: false,
   };
 
   static description = "Blurs an image";

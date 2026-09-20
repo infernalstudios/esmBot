@@ -1,17 +1,27 @@
-import Command from "../../classes/command.js";
+import Command from "#cmd-classes/command.js";
 
 class DiceCommand extends Command {
   async run() {
-    if (this.args.length === 0 || !this.args[0].match(/^\d+$/)) {
-      return `🎲 The dice landed on ${Math.floor(Math.random() * 6) + 1}.`;
-    } else {
-      return `🎲 The dice landed on ${Math.floor(Math.random() * parseInt(this.args[0])) + 1}.`;
-    }
+    const max = this.getOptionInteger("max", true);
+    return `🎲 ${this.getString("commands.responses.dice.landed", {
+      params: {
+        number: (Math.floor(Math.random() * (max || 6)) + 1).toString(),
+      },
+    })}`;
   }
+
+  static flags = [
+    {
+      name: "max",
+      type: "integer",
+      description: "The maximum dice value",
+      minValue: 1,
+      classic: true,
+    },
+  ];
 
   static description = "Rolls the dice";
   static aliases = ["roll", "die", "rng", "random"];
-  static arguments = ["{number}"];
 }
 
 export default DiceCommand;

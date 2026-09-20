@@ -1,15 +1,38 @@
-import Command from "../../classes/command.js";
+import Command from "#cmd-classes/command.js";
+import { safeBigInt } from "#utils/misc.js";
 
 class SnowflakeCommand extends Command {
   async run() {
-    if (!this.args[0]) return "You need to provide a snowflake ID!";
-    if (!this.args[0].match(/^<?[@#]?[&!]?\d+>?$/) && this.args[0] < 21154535154122752n) return "That's not a valid snowflake!";
-    return `<t:${Math.floor(((this.args[0].replaceAll("@", "").replaceAll("#", "").replaceAll("!", "").replaceAll("&", "").replaceAll("<", "").replaceAll(">", "") / 4194304) + 1420070400000) / 1000)}:F>`;
+    this.success = false;
+    if (!this.args[0]) return this.getString("commands.responses.snowflake.noInput");
+    if (!this.args[0].match(/^<?[@#]?[&!]?\d+>?$/) || Number.parseInt(this.args[0]) < 21154535154122752n)
+      return this.getString("commands.responses.snowflake.invalid");
+    const baseId = safeBigInt(
+      this.args[0]
+        .replaceAll("@", "")
+        .replaceAll("#", "")
+        .replaceAll("!", "")
+        .replaceAll("&", "")
+        .replaceAll("<", "")
+        .replaceAll(">", ""),
+    );
+    if (baseId === -1) throw this.getString("commands.responses.snowflake.invalid");
+    const id = (baseId / 4194304n + 1420070400000n) / 1000n;
+    this.success = true;
+    return `<t:${id}:F>`;
   }
 
   static description = "Converts a Discord snowflake id into a timestamp";
   static aliases = ["timestamp", "snowstamp", "snow"];
-  static arguments = ["[id]"];
+  static flags = [
+    {
+      name: "id",
+      type: "string",
+      description: "A snowflake ID",
+      classic: true,
+    },
+  ];
+  static slashAllowed = false;
 }
 
 export default SnowflakeCommand;

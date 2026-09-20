@@ -1,28 +1,58 @@
-import Command from "../../classes/command.js";
+import process from "node:process";
+import Command from "#cmd-classes/command.js";
+import { paths } from "#utils/collections.js";
+import { load, send } from "#utils/handler.js";
 
 class ReloadCommand extends Command {
-  // quite possibly one of the hackiest commands in the bot
-  run() {
-    return new Promise((resolve) => {
-      const owners = process.env.OWNER.split(",");
-      if (!owners.includes(this.message.author.id)) return resolve("Only the bot owner can reload commands!");
-      if (this.args.length === 0) return resolve("You need to provide a command to reload!");
-      this.ipc.broadcast("reload", this.args[0]);
-      this.ipc.register("reloadSuccess", () => {
-        this.ipc.unregister("reloadSuccess");
-        this.ipc.unregister("reloadFail");
-        resolve(`The command \`${this.args[0]}\` has been reloaded.`);
+  async run() {
+    const owners = process.env.OWNER?.split(",") ?? [];
+    if (!owners.includes(this.author.id)) return this.getString("commands.responses.reload.botOwnerOnly");
+    const commandName = this.getOptionString("cmd") ?? this.args.join(" ");
+    if (!commandName || !commandName.trim()) return this.getString("commands.responses.reload.noInput");
+    await this.acknowledge();
+    const path = paths.get(commandName);
+    if (!path) return this.getString("commands.responses.reload.noCommand");
+    const result = await load(path);
+    const skipSend = this.getOptionBoolean("skipsend");
+    if (!skipSend) {
+      await send(this.client);
+    }
+    if (result?.name !== commandName) return this.getString("commands.responses.reload.reloadFailed");
+    if (process.env.CLUSTER_TYPE) {
+      process.send?.({
+        type: "process:msg",
+        data: {
+          type: "reload",
+          from: process.env.pm_id,
+          message: commandName,
+        },
       });
-      this.ipc.register("reloadFail", (message) => {
-        this.ipc.unregister("reloadSuccess");
-        this.ipc.unregister("reloadFail");
-        resolve(message.result);
-      });
+    }
+    return this.getString("commands.responses.reload.reloaded", {
+      params: {
+        command: commandName,
+      },
     });
   }
 
+  static flags = [
+    {
+      name: "cmd",
+      type: "string",
+      description: "The command to reload",
+      classic: true,
+      required: true,
+    },
+    {
+      name: "skipsend",
+      type: "boolean",
+      description: "Skips sending new application command data to Discord",
+      classic: true,
+    },
+  ];
+
   static description = "Reloads a command";
-  static arguments = ["[command]"];
+  static adminOnly = true;
 }
 
 export default ReloadCommand;

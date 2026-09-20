@@ -1,81 +1,136 @@
-import { readFileSync } from "fs";
-const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url)));
-import os from "os";
-import Command from "../../classes/command.js";
-import { VERSION } from "eris";
-import { exec as baseExec } from "child_process";
-import { promisify } from "util";
-const exec = promisify(baseExec);
+import os from "node:os";
+import process from "node:process";
+import { VERSION } from "oceanic.js";
+import Command from "#cmd-classes/command.js";
+import detectRuntime from "#utils/detectRuntime.js";
+import { getServers } from "#utils/misc.js";
+import packageJson from "../../package.json" with { type: "json" };
 
 class StatsCommand extends Command {
   async run() {
+    if (!this.permissions.has("EMBED_LINKS")) {
+      this.success = false;
+      return this.getString("permissions.noEmbedLinks");
+    }
     const uptime = process.uptime() * 1000;
     const connUptime = this.client.uptime;
-    const owner = await this.ipc.fetchUser(process.env.OWNER.split(",")[0]);
-    const stats = await this.ipc.getStats();
+    const owners = process.env.OWNER?.split(",") ?? [];
+    let owner;
+    if (owners.length !== 0) {
+      owner = this.client.users.get(owners[0]) ?? (await this.client.rest.users.get(owners[0]));
+    }
+    const servers = await getServers(this.client);
+    const processMem = `${(process.memoryUsage().heapUsed / 1000 / 1000).toFixed(2)} MB`;
+    const runtime = detectRuntime();
     return {
-      embeds: [{
-        "author": {
-          "name": "esmBot Statistics",
-          "icon_url": this.client.user.avatarURL
-        },
-        "description": `This instance is managed by **${owner.username}#${owner.discriminator}**.`,
-        "color": 16711680,
-        "fields": [{
-          "name": "Version",
-          "value": `v${version}${process.env.NODE_ENV === "development" ? `-dev (${(await exec("git rev-parse HEAD")).stdout.substring(0, 7)})` : ""}`
-        },
+      embeds: [
         {
-          "name": "Cluster Memory Usage",
-          "value": stats && stats.clusters[this.cluster] ? `${stats.clusters[this.cluster].ram.toFixed(2)} MB` : `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`,
-          "inline": true
+          author: {
+            name: this.getString("commands.responses.stats.header"),
+            iconURL: this.client.user.avatarURL(),
+          },
+          description: this.getString("managedBy", { params: { owner: owner?.username ?? "N/A" } }),
+          color: 0xff0000,
+          fields: [
+            {
+              name: this.getString("commands.responses.stats.version"),
+              value: `v${packageJson.version}${process.env.NODE_ENV === "development" ? `-dev (${process.env.GIT_REV})` : ""}`,
+            },
+            {
+              name: this.getString("commands.responses.stats.processUsage"),
+              value: processMem,
+              inline: true,
+            },
+            {
+              name: this.getString("commands.responses.stats.totalUsage"),
+              value: (await this.getMem()) ?? processMem,
+              inline: true,
+            },
+            {
+              name: this.getString("commands.responses.stats.botUptime"),
+              value: this.getString("timeFormat", {
+                params: {
+                  days: Math.trunc(uptime / 86400000).toString(),
+                  hours: (Math.trunc(uptime / 3600000) % 24).toString(),
+                  minutes: (Math.trunc(uptime / 60000) % 60).toString(),
+                  seconds: (Math.trunc(uptime / 1000) % 60).toString(),
+                },
+              }),
+            },
+            {
+              name: this.getString("commands.responses.stats.connectionUptime"),
+              value: this.getString("timeFormat", {
+                params: {
+                  days: Math.trunc(connUptime / 86400000).toString(),
+                  hours: (Math.trunc(connUptime / 3600000) % 24).toString(),
+                  minutes: (Math.trunc(connUptime / 60000) % 60).toString(),
+                  seconds: (Math.trunc(connUptime / 1000) % 60).toString(),
+                },
+              }),
+            },
+            {
+              name: this.getString("commands.responses.stats.host"),
+              value: `${os.type()} ${os.release()} (${os.arch()})`,
+              inline: true,
+            },
+            {
+              name: this.getString("commands.responses.stats.library"),
+              value: `Oceanic ${VERSION}`,
+              inline: true,
+            },
+            {
+              name: this.getString(`commands.responses.stats.${runtime.type}Version`),
+              value: runtime.version ?? "N/A",
+              inline: true,
+            },
+            {
+              name: this.getString("commands.responses.stats.shard"),
+              value: this.guild ? (this.client.guildShardMap.get(this.guild.id)?.toString() ?? "N/A") : "N/A",
+              inline: true,
+            },
+            {
+              name: this.getString("commands.responses.stats.servers"),
+              value: servers
+                ? servers.toString()
+                : this.getString("commands.responses.stats.processOnly", {
+                    params: { count: this.client.guilds.size.toString() },
+                  }),
+              inline: true,
+            },
+          ],
         },
-        {
-          "name": "Total Memory Usage",
-          "value": stats && stats.totalRam ? `${stats.totalRam.toFixed(2)} MB` : "Unknown",
-          "inline": true
-        },
-        {
-          "name": "Bot Uptime",
-          "value": `${Math.trunc(uptime / 86400000)} days, ${Math.trunc(uptime / 3600000) % 24} hrs, ${Math.trunc(uptime / 60000) % 60} mins, ${Math.trunc(uptime / 1000) % 60} secs`
-        },
-        {
-          "name": "Connection Uptime",
-          "value": `${Math.trunc(connUptime / 86400000)} days, ${Math.trunc(connUptime / 3600000) % 24} hrs, ${Math.trunc(connUptime / 60000) % 60} mins, ${Math.trunc(connUptime / 1000) % 60} secs`
-        },
-        {
-          "name": "Host",
-          "value": `${os.type()} ${os.release()} (${os.arch()})`,
-          "inline": true
-        },
-        {
-          "name": "Library",
-          "value": `Eris ${VERSION}`,
-          "inline": true
-        },
-        {
-          "name": "Node.js Version",
-          "value": process.version,
-          "inline": true
-        },
-        {
-          "name": "Shard",
-          "value": this.message.channel.guild ? this.client.guildShardMap[this.message.channel.guild.id] : "N/A",
-          "inline": true
-        },
-        {
-          "name": "Cluster",
-          "value": this.cluster,
-          "inline": true
-        },
-        {
-          "name": "Servers",
-          "value": stats && stats.guilds ? stats.guilds : `${this.client.guilds.size} (for this cluster only)`,
-          "inline": true
-        }
-        ]
-      }]
+      ],
     };
+  }
+
+  /**
+   * @returns {Promise<string | null>}
+   */
+  getMem() {
+    if (process.env.CLUSTER_TYPE === "node") {
+      return new Promise((resolve, reject) => {
+        const listener = (/** @type {{ data: { type: string; totalMem: number; }; }} */ message) => {
+          if (message.data?.type === "memResponse") {
+            clearTimeout(timeout);
+            const value = message.data.totalMem / 1000 / 1000;
+            resolve(`${value.toFixed(2)} MB`);
+            process.off("message", listener);
+          }
+        };
+        process.on("message", listener);
+        const timeout = setTimeout(() => {
+          process.off("message", listener);
+          reject("Timed out");
+        }, 3000);
+        process.send?.({
+          data: {
+            type: "getMem",
+          },
+        });
+      });
+    } else {
+      return Promise.resolve(null);
+    }
   }
 
   static description = "Gets some statistics about me";

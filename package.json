@@ -1,68 +1,89 @@
 {
   "name": "@infernalstudios/esmbot",
-  "version": "1.7.2",
+  "version": "2026.9.0",
   "description": "A customized version of the esmBot for the Infernal Studios Discord server.",
-  "exports": "./app.js",
-  "bin": "./app.js",
-  "type": "module",
-  "engines": {
-    "node": ">=15"
-  },
-  "scripts": {
-    "build": "cmake-js compile",
-    "start": "node app.js"
-  },
-  "author": "Essem <essem@essem.space>",
-  "contributors": [
-    {
-      "name": "Infernal Studios",
-      "email": "contact@infernalstudios.org",
-      "url": "https://infernalstudios.org"
-    },
-    {
-      "name": "Kārlis Čerņavskis",
-      "email": "karliscern@gmail.com",
-      "url": "https://cernavskis.dev"
-    }
-  ],
   "license": "MIT",
+  "author": "Essem <essem@essem.space>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/infernalexp/esmBot.git"
   },
+  "bin": "./dist/app.js",
+  "binary": {
+    "napi_versions": [
+      7
+    ]
+  },
+  "type": "module",
+  "imports": {
+    "#cmd-classes/*": {
+      "node": "./dist/classes/*",
+      "default": "./src/classes/*"
+    },
+    "#utils/*": {
+      "node": "./dist/utils/*",
+      "default": "./src/utils/*"
+    },
+    "#pagination": {
+      "node": "./dist/pagination/pagination.js",
+      "default": "./src/pagination/pagination.ts"
+    },
+    "#config/*": "./config/*"
+  },
+  "exports": "./dist/app.js",
+  "scripts": {
+    "build": "tsc && pnpm build:natives",
+    "build:no-lqr": "tsc && pnpm build:natives:no-lqr",
+    "build:debug": "tsc && pnpm build:natives:debug",
+    "build:debug-no-lqr": "tsc && pnpm build:natives:debug-no-lqr",
+    "build:natives": "cmake-js compile --CDWITH_LQR=ON",
+    "build:natives:debug": "cmake-js compile -BDebug --CDWITH_LQR=ON",
+    "build:natives:no-lqr": "cmake-js compile --CDWITH_LQR=OFF",
+    "build:natives:debug-no-lqr": "cmake-js compile -BDebug --CDWITH_LQR=OFF",
+    "build:cli": "cmake -B standalone-build -DWITH_CLI=ON -DWITH_LQR=ON -DCMAKE_BUILD_TYPE=Release && cmake --build standalone-build",
+    "build:cli:no-lqr": "cmake -B standalone-build -DWITH_CLI=ON -DWITH_LQR=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build standalone-build",
+    "build:ts": "tsc",
+    "docker:build": "DOCKER_BUILDKIT=1 docker build -t esmbot .",
+    "docker:run-bot": "docker run --rm --network=host esmbot",
+    "docker:run-api": "docker run --rm --network=host esmbot dist/api/index.js",
+    "docker:run-lava": "docker run --rm --network host -v \"$(pwd)\"/application.yml:/opt/Lavalink/application.yml ghcr.io/lavalink-devs/lavalink:4",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "start": "node --env-file-if-exists=.env dist/app.js",
+    "start:deno": "deno run -P --env-file src/app.ts",
+    "start:debug": "DEBUG=true node --env-file-if-exists=.env dist/app.js",
+    "start:deno:debug": "DEBUG=true deno run -P --env-file src/app.ts",
+    "start-api": "node dist/api/index.js",
+    "start-api:deno": "deno run -P src/api/index.ts",
+    "start-api:debug": "DEBUG=true node dist/api/index.js",
+    "start-api:deno:debug": "DEBUG=true deno run -P src/api/index.ts"
+  },
   "dependencies": {
-    "@top-gg/sdk": "^3.1.1",
-    "cmake-js": "^6.3.0",
-    "cowsay2": "^2.0.4",
-    "dotenv": "^15.0.0",
-    "emoji-regex": "^10.0.0",
-    "eris": "^0.16.1",
-    "eris-fleet": "^1.0.0",
-    "file-type": "^17.1.1",
-    "format-duration": "^1.4.0",
-    "jsqr": "^1.3.1",
-    "lavacord": "^1.1.9",
-    "node-addon-api": "^4.3.0",
-    "node-emoji": "^1.10.0",
-    "node-fetch": "^3.2.0",
-    "qrcode": "^1.4.4",
-    "sharp": "^0.29.3",
-    "winston": "^3.3.3"
+    "bufferutil": "^4.1.0",
+    "file-type": "^22.0.2",
+    "ipaddr.js": "^2.5.0",
+    "node-addon-api": "^8.9.2",
+    "oceanic.js": "1.15.0",
+    "postgres": "^3.4.9",
+    "shoukaku": "^4.3.0",
+    "winston": "^3.19.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@babel/eslint-parser": "^7.13.8",
-    "@babel/eslint-plugin": "^7.13.0",
-    "@babel/plugin-proposal-class-properties": "^7.13.0",
-    "eslint": "^8.2.0",
-    "eslint-plugin-unicorn": "^40.1.0"
+    "@types/node": "22",
+    "@types/ws": "^8.18.1",
+    "cmake-js": "^8.0.0",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
+    "typescript": "^7.0.2"
   },
   "optionalDependencies": {
-    "better-sqlite3": "^7.4.1",
-    "bufferutil": "^4.0.1",
-    "erlpack": "github:abalabahaha/erlpack",
-    "pg": "^8.5.1",
-    "uuid": "^8.3.1",
-    "ws": "^8.2.3",
-    "zlib-sync": "^0.1.6"
-  }
+    "@sentry/deno": "^10.70.0",
+    "@sentry/node-core": "^10.70.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "packageManager": "pnpm@11.6.0+sha512.9a36518224080c6fe5165afdcfe79bfa118c29be703f3f462b1e32efe1e98e47e8750b148e08286250aad4113cc7993ca413c4e2cd447752708c2ee5751bc95f"
 }

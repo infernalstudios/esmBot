@@ -1,26 +1,48 @@
-import fetch from "node-fetch";
-import Command from "../../classes/command.js";
+import Command from "#cmd-classes/command.js";
+import logger from "#utils/logger.js";
 
 class DonateCommand extends Command {
   async run() {
-    this.client.sendChannelTyping(this.message.channel.id);
-    let prefix = "";
-    const controller = new AbortController(); // eslint-disable-line no-undef
+    await this.acknowledge();
+    let desc = "";
+    const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
     }, 5000);
     try {
-      const patrons = await fetch("https://projectlounge.pw/patrons", { signal: controller.signal }).then(data => data.json());
+      const patrons = await fetch("https://esmbot.net/patrons", { signal: controller.signal }).then((data) =>
+        data.json(),
+      );
       clearTimeout(timeout);
-      prefix = "Thanks to the following patrons for their support:\n";
       for (const patron of patrons) {
-        prefix += `**- ${patron}**\n`;
+        desc += `\n- **${patron}**`;
       }
-      prefix += "\n";
     } catch (e) {
-      // no-op
+      logger.error(`Unable to get patron data: ${e}`);
     }
-    return `${prefix}Like esmBot? Consider supporting the developer on Patreon to help keep it running! https://patreon.com/TheEssem`;
+    return {
+      embeds: [
+        {
+          author: {
+            name: this.getString("commands.responses.donate.thanks"),
+            iconURL: this.client.user.avatarURL(),
+          },
+          color: 0xff0000,
+          description: desc,
+          fields: [
+            {
+              name: this.getString("commands.responses.donate.like"),
+              value: this.getString("commands.responses.donate.support", {
+                params: {
+                  patreon: "https://patreon.com/TheEssem",
+                  kofi: "https://ko-fi.com/TheEssem",
+                },
+              }),
+            },
+          ],
+        },
+      ],
+    };
   }
 
   static description = "Learn more about how you can support esmBot's development";

@@ -1,0 +1,323 @@
+import {
+  type AnyTextableChannel,
+  type Attachment,
+  AttachmentFlags,
+  CommandInteraction,
+  Constants,
+  type JSONAttachment,
+  type Message,
+  type RawAttachment,
+  type User,
+} from "oceanic.js";
+import messages from "#config/messages.json" with { type: "json" };
+import { runningCommands, selectedImages } from "#utils/collections.js";
+import { convFlagType } from "#utils/handler.js";
+import { getAllLocalizations } from "#utils/i18n.js";
+import logger from "#utils/logger.js";
+import { runMediaJob } from "#utils/media.js";
+import mediaDetect from "#utils/mediadetect.js";
+import { clean, isEmpty, maxFileSize, random } from "#utils/misc.js";
+import { upload } from "#utils/tempimages.js";
+import type { ExtendedConstructedCommandOptions, MediaParams, MediaMeta, MediaTypes } from "#utils/types.js";
+import Command from "./command.ts";
+
+class MediaCommand extends Command {
+  params?: object;
+
+  paramsFunc(): object {
+    return {};
+  }
+
+  async criteria(_text?: string | number | boolean | User | Attachment) {
+    return true;
+  }
+
+  async run() {
+    this.success = false;
+
+    if (!this.permissions.has("ATTACH_FILES")) return this.getString("permissions.noAttachFiles");
+
+    const timestamp =
+      this.type === "application" && this.interaction
+        ? CommandInteraction.getCreatedAt(this.interaction.id)
+        : (this.message?.createdAt ?? new Date());
+    // check if this command has already been run in this channel with the same arguments, and we are awaiting its result
+    // if so, don't re-run it
+    const running = runningCommands.get(this.author?.id);
+    if (running && running.getTime() - timestamp.getTime() < 5000) {
+      return this.getString("image.slowDown");
+    }
+    // before awaiting the command result, add this command to the set of running commands
+    runningCommands.set(this.author.id, timestamp);
+
+    const staticProps = this.constructor as typeof MediaCommand;
+
+    const ephemeral = this.getOptionBoolean("ephemeral");
+    const spoiler = this.getOptionBoolean("spoiler");
+    const sizeLimit = this.interaction?.attachmentSizeLimit ?? maxFileSize(this.guild);
+    let mediaParams: MediaParams;
+
+    if (staticProps.requiresImage) {
+      try {
+        let selection: MediaMeta | undefined;
+        if (!this.getOptionAttachment("image") && !this.getOptionString("link")) {
+          selection = selectedImages.get(this.author.id);
+        }
+        const media = selection
+          ? [selection]
+          : await mediaDetect(this.client, this.permissions, this.message, this.interaction).catch((e) => {
+              if (e.name === "AbortError") {
+                runningCommands.delete(this.author.id);
+                return this.getString("image.timeout");
+              }
+              throw e;
+            });
+        if (media.length === 0) {
+          runningCommands.delete(this.author.id);
+          return `${this.getString(`commands.noImage.${this.cmdName}`, { returnNull: true }) || this.getString("image.noImage", { returnNull: true }) || staticProps.noImage} ${this.getString("image.tip", { params: { name: this.client.user.globalName ?? this.client.user.username } })}`;
+        }
+        if (typeof media === "string") return media;
+        selectedImages.delete(this.author.id);
+        mediaParams = {
+          cmd: staticProps.command,
+          params: {},
+          id: (this.interaction ?? this.message)?.id ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString(),
+          inputs: media,
+          spoiler,
+          token: this.interaction?.token,
+          filesize: sizeLimit,
+        };
+      } catch (e) {
+        runningCommands.delete(this.author.id);
+        throw e;
+      }
+    } else {
+      mediaParams = {
+        cmd: staticProps.command,
+        params: {},
+        inputs: [],
+        id: (this.interaction ?? this.message)?.id ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString(),
+        spoiler,
+        token: this.interaction?.token,
+        filesize: sizeLimit,
+      };
+    }
+
+    if (staticProps.requiresParam) {
+      const text =
+        this.getOption(
+          staticProps.requiredParam,
+          convFlagType(staticProps.requiredParamType),
+          staticProps.requiredParamType !== Constants.ApplicationCommandOptionTypes.STRING &&
+            staticProps.requiredParamType !== "string",
+        ) ?? this.args.join(" ").trim();
+      if (!text || (typeof text === "string" && isEmpty(text)) || !(await this.criteria(text))) {
+        runningCommands.delete(this.author?.id);
+        return (
+          this.getString(`commands.noParam.${this.cmdName}`, { returnNull: true }) ||
+          this.getString("image.noParam", { returnNull: true }) ||
+          staticProps.noParam
+        );
+      }
+    }
+
+    mediaParams.params = {
+      togif: !!this.getOptionBoolean("togif"),
+      ...(this.params ?? this.paramsFunc()),
+    };
+
+    let status: Message | undefined;
+    if (this.message) {
+      status = await this.processMessage(
+        this.message.channel ?? (await this.client.rest.channels.get(this.message.channelID)),
+      );
+    }
+
+    try {
+      const result = await runMediaJob(mediaParams);
+      const buffer = result.buffer;
+      const type = result.type;
+      if (type === "sent") {
+        if (buffer.length > 2 && this.interaction && this.interaction.authorizingIntegrationOwners[0] === undefined) {
+          const attachment = JSON.parse(buffer.toString()) as RawAttachment & JSONAttachment;
+          const path = new URL(attachment.proxy_url ?? attachment.proxyURL);
+          path.searchParams.set("animated", "true");
+          selectedImages.set(this.interaction.user.id, {
+            path: path.toString(),
+            spoiler: !!(attachment.flags & AttachmentFlags.IS_SPOILER),
+          });
+        }
+        return;
+      }
+      if (type === "large") return this.getString("image.large");
+      if (type === "frames") return this.getString("image.frames");
+      if (type === "small") return this.getString("image.small");
+      if (type === "avis") return this.getString("image.animatedAVIF");
+      if (type === "unknown") return this.getString("image.unknown");
+      if (type === "noresult") return this.getString("image.noResult");
+      if (type === "ratelimit") return this.getString("image.ratelimit");
+      if (type === "nocmd") return this.getString("image.nocmd");
+      if (type === "noanim") return this.getString("image.noanim");
+      if (type === "nomedia")
+        return `${this.getString(`commands.noImage.${this.cmdName}`, { returnNull: true }) || this.getString("image.noImage", { returnNull: true }) || staticProps.noImage} ${this.getString("image.tip", { params: { name: this.client.user.globalName ?? this.client.user.username } })}`;
+      if (type === "empty") return staticProps.empty;
+
+      this.success = true;
+      const flags = ephemeral ? 64 : undefined;
+
+      if (type === "text") {
+        return {
+          content: `\`\`\`\n${clean(buffer.toString("utf8"), [], true)}\n\`\`\``,
+          flags,
+        };
+      }
+
+      const file = {
+        contents: buffer,
+        name: `${spoiler || result.spoiler ? "SPOILER_" : ""}${staticProps.command}.${type}`,
+      };
+      if (buffer.length > sizeLimit) {
+        if (process.env.TEMPDIR && process.env.TEMPDIR !== "" && this.permissions.has("EMBED_LINKS")) {
+          if (this.interaction) {
+            await upload(this.client, { ...file, flags }, this.interaction);
+          } else if (this.message) {
+            await upload(this.client, { ...file, flags }, this.message);
+          }
+        } else {
+          return {
+            content: this.getString("image.noTempServer"),
+            flags: 64,
+          };
+        }
+      } else {
+        return {
+          files: [file],
+          flags,
+        };
+      }
+    } catch (e) {
+      const err = e as Error;
+      const errString = err.toString();
+      if (errString.includes("media_not_working")) return this.getString("image.notWorking");
+      if (errString.includes("Request ended prematurely due to a closed connection"))
+        return this.getString("image.tryAgain");
+      if (errString.includes("image_pixel_limit")) return this.getString("image.pixelLimit");
+      if (errString.includes("media_job_killed") || errString.includes("Timeout"))
+        return this.getString("image.tooLong");
+      if (errString.includes("No available servers")) return this.getString("image.noServers");
+      throw err;
+    } finally {
+      if (status) await status.delete().catch((e) => logger.warn(`Failed to delete status message: ${e}`));
+      runningCommands.delete(this.author?.id);
+    }
+  }
+
+  async finalize(res?: Message) {
+    if (!this.interaction || !res) return;
+    const attachment = res.attachments.first();
+    if (attachment) {
+      const path = new URL(attachment.proxyURL);
+      path.searchParams.set("animated", "true");
+      selectedImages.set(this.interaction.user.id, {
+        path: path.toString(),
+        spoiler: !!(attachment.flags & AttachmentFlags.IS_SPOILER),
+      });
+    }
+  }
+
+  processMessage(channel: AnyTextableChannel): Promise<Message> {
+    return channel.createMessage({
+      content: `${random(messages.emotes) || "⚙️"} ${this.getString("image.processing")}`,
+    });
+  }
+
+  static addTextParam(maxLen?: number) {
+    this.flags.unshift({
+      name: "text",
+      nameLocalizations: getAllLocalizations("image.flagNames.text"),
+      type: Constants.ApplicationCommandOptionTypes.STRING,
+      description: "The text to put on the image",
+      descriptionLocalizations: getAllLocalizations("image.flags.text"),
+      maxLength: maxLen ?? 4096,
+      required: !this.textOptional,
+      classic: true,
+    });
+  }
+
+  static init() {
+    this.flags = [];
+    if (this.requiresImage) {
+      this.flags.push(
+        {
+          name: "image",
+          nameLocalizations: getAllLocalizations("image.flagNames.image"),
+          type: Constants.ApplicationCommandOptionTypes.ATTACHMENT,
+          fileTypes: this.supportedTypes,
+          description: "An image/GIF attachment",
+          descriptionLocalizations: getAllLocalizations("image.flags.image"),
+        },
+        {
+          name: "link",
+          nameLocalizations: getAllLocalizations("image.flagNames.link"),
+          type: Constants.ApplicationCommandOptionTypes.STRING,
+          description: "An image/GIF URL",
+          descriptionLocalizations: getAllLocalizations("image.flags.link"),
+        },
+      );
+    }
+    if (!this.alwaysGIF) {
+      this.flags.push({
+        name: "togif",
+        nameLocalizations: getAllLocalizations("image.flagNames.togif"),
+        type: Constants.ApplicationCommandOptionTypes.BOOLEAN,
+        description: "Force GIF output",
+        descriptionLocalizations: getAllLocalizations("image.flags.togif"),
+      });
+    }
+
+    this.flags.push(
+      {
+        name: "spoiler",
+        nameLocalizations: getAllLocalizations("image.flagNames.spoiler"),
+        type: Constants.ApplicationCommandOptionTypes.BOOLEAN,
+        description: "Attempt to send output as a spoiler",
+        descriptionLocalizations: getAllLocalizations("image.flags.spoiler"),
+      },
+      {
+        name: "ephemeral",
+        nameLocalizations: getAllLocalizations("image.flagNames.ephemeral"),
+        type: Constants.ApplicationCommandOptionTypes.BOOLEAN,
+        description: "Attempt to send output as an ephemeral/temporary response",
+        descriptionLocalizations: getAllLocalizations("image.flags.ephemeral"),
+      },
+    );
+    return this;
+  }
+
+  static allowedFonts = [
+    "futura",
+    "impact",
+    "helvetica",
+    "arial",
+    "roboto",
+    "noto",
+    "times",
+    "comic sans ms",
+    "ubuntu",
+  ];
+
+  static supportedTypes: MediaTypes[] = ["image"];
+
+  static requiresImage = true;
+  static requiresParam = false;
+  static requiredParam = "text";
+  static requiredParamType: ExtendedConstructedCommandOptions["type"] = "string";
+  static textOptional = false;
+  static alwaysGIF = false;
+  static noImage = "You need to provide an image/GIF!";
+  static noParam = "You need to provide some text!";
+  static empty = "The resulting output was empty!";
+  static command = "";
+}
+
+export default MediaCommand;

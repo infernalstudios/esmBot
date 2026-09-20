@@ -1,8 +1,8 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class HaaHCommand extends ImageCommand {
+class HaaHCommand extends MediaCommand {
   params = {
-    first: true
+    first: true,
   };
 
   static description = "Mirrors the left side of an image onto the right";

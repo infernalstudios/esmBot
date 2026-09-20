@@ -1,11 +1,9 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class SepiaCommand extends ImageCommand {
-  params() {
-    return {
-      color: "sepia"
-    };
-  }
+class SepiaCommand extends MediaCommand {
+  params = {
+    color: "sepia",
+  };
 
   static description = "Adds a sepia filter";
 

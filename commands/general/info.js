@@ -1,36 +1,77 @@
-import { readFileSync } from "fs";
-const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url)));
-import Command from "../../classes/command.js";
-import { exec as baseExec } from "child_process";
-import { promisify } from "util";
-const exec = promisify(baseExec);
+import process from "node:process";
+import Command from "#cmd-classes/command.js";
+import { getServers } from "#utils/misc.js";
+import packageJson from "../../package.json" with { type: "json" };
 
 class InfoCommand extends Command {
   async run() {
-    const owner = await this.ipc.fetchUser(process.env.OWNER.split(",")[0]);
-    const stats = await this.ipc.getStats();
+    if (!this.permissions.has("EMBED_LINKS")) {
+      this.success = false;
+      return this.getString("permissions.noEmbedLinks");
+    }
+    const owners = process.env.OWNER?.split(",") ?? [];
+    let owner;
+    if (owners.length !== 0) {
+      owner = this.client.users.get(owners[0]);
+      if (!owner) owner = await this.client.rest.users.get(owners[0]);
+    }
+    const servers = await getServers(this.client);
+    await this.acknowledge();
     return {
-      embeds: [{
-        color: 16711680,
-        author: {
-          name: "esmBot Info/Credits",
-          icon_url: this.client.user.avatarURL
-        },
-        description: `This instance is managed by **${owner.username}#${owner.discriminator}**.`,
-        fields: [{
-          name: "ℹ️ Version:",
-          value: `v${version}${process.env.NODE_ENV === "development" ? `-dev (${(await exec("git rev-parse HEAD")).stdout.substring(0, 7)})` : ""}`
-        },
+      embeds: [
         {
-          name: "📝 Credits:",
-          value: "Bot by **[Essem](https://essem.space)** and **[various contributors](https://github.com/esmBot/esmBot/graphs/contributors)**\nCustomized for Infernal Studios by [Swan](https://github.com/SwanX1)\nIcon by **[MintBurrow](https://twitter.com/MintBurrow)**"
+          color: 0xff0000,
+          author: {
+            name: "esmBot Info/Credits",
+            iconURL: this.client.user.avatarURL(),
+          },
+          description: this.getString("managedBy"),
+          fields: [
+            {
+              name: `ℹ️ ${this.getString("commands.responses.info.version")}`,
+              value: `v${packageJson.version}${process.env.NODE_ENV === "development" ? `-dev (${process.env.GIT_REV})` : ""}`,
+            },
+            {
+              name: `📝 ${this.getString("commands.responses.info.creditsHeader")}`,
+              value: this.getString("commands.responses.info.credits"),
+            },
+            {
+              name: `💬 ${this.getString("commands.responses.info.totalServers")}`,
+              value: servers
+                ? servers.toString()
+                : this.getString("commands.responses.info.processOnly", {
+                    params: { count: this.client.guilds.size.toString() },
+                  }),
+            },
+            {
+              name: `✅ ${this.getString("commands.responses.info.officialServer")}`,
+              value: `[${this.getString("commands.responses.info.clickHere")}](https://esmbot.net/support)`,
+            },
+            {
+              name: `💻 ${this.getString("commands.responses.info.sourceCode")}`,
+              value: `[${this.getString("commands.responses.info.clickHere")}](https://github.com/infernalstudios/esmBot)`,
+            },
+            {
+              name: `🌐 ${this.getString("commands.responses.info.translate")}`,
+              value: `[${this.getString("commands.responses.info.clickHere")}](https://translate.codeberg.org/projects/esmbot/esmbot/)`,
+            },
+            {
+              name: `🛡️ ${this.getString("commands.responses.info.privacyPolicy")}`,
+              value: `[${this.getString("commands.responses.info.clickHere")}](https://esmbot.net/privacy.html)`,
+            },
+            {
+              name: "🐘 Mastodon:",
+              value: `[${this.getString("commands.responses.info.clickHere")}](https://wetdry.world/@esmBot)`,
+              inline: true,
+            },
+            {
+              name: "🦋 Bluesky:",
+              value: `[${this.getString("commands.responses.info.clickHere")}](https://bsky.app/profile/esmbot.net)`,
+              inline: true,
+            },
+          ],
         },
-        {
-          name: "💻 Source Code:",
-          value: "[Click here!](https://github.com/infernalexp/esmBot)"
-        }
-        ]
-      }]
+      ],
     };
   }
 

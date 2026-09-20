@@ -1,17 +1,14 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class SooSCommand extends ImageCommand {
-  params(url, delay) {
-    return {
-      delay: delay ? (100 / delay.split("/")[0]) * delay.split("/")[1] : 0,
-      soos: true
-    };
-  }
+class SooSCommand extends MediaCommand {
+  params = {
+    soos: true,
+  };
 
-  static description = "\"Loops\" an image sequence by reversing it when it's finished";
-  static aliases = ["bounce", "boomerang"];
+  static description = '"Loops" an image sequence by reversing it when it\'s finished';
+  static aliases = ["boomerang"];
 
-  static requiresGIF = true;
+  static alwaysGIF = true;
   static noImage = "You need to provide an image/GIF to loop!";
   static command = "reverse";
 }

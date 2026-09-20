@@ -1,19 +1,25 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class HomebrewCommand extends ImageCommand {
-  params() {
+class HomebrewCommand extends MediaCommand {
+  paramsFunc() {
+    const newArgs = this.getOptionString("text") ?? this.args.join(" ");
     return {
-      caption: this.args.join(" ").toLowerCase().replaceAll("\n", " ")
+      caption: this.clean(newArgs),
     };
+  }
+
+  static init() {
+    super.init();
+    this.addTextParam();
+    return this;
   }
 
   static description = "Creates a Homebrew Channel edit";
   static aliases = ["hbc", "brew", "wiibrew"];
-  static arguments = ["[text]"];
 
   static requiresImage = false;
-  static requiresText = true;
-  static noText = "You need to provide some text to make a Homebrew Channel edit!";
+  static requiresParam = true;
+  static noParam = "You need to provide some text to make a Homebrew Channel edit!";
   static command = "homebrew";
 }
 

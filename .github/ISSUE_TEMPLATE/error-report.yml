@@ -10,10 +10,10 @@ body:
     validations:
       required: true
   - type: input
-    id: image
+    id: media
     attributes:
-      label: Image that caused the error
-      description: If the error is regarding an image command, please post a direct link to the image here.
+      label: Media file that caused the error
+      description: If the error is regarding a media command, please post a direct link to the input file here.
     validations:
       required: false
   - type: textarea
@@ -32,7 +32,7 @@ body:
     id: error
     attributes:
       label: Error file
-      description: Post the contents of the error file in between the backticks.
+      description: Post the contents of the **entire** error file in between the backticks, not just the preview that Discord gives.
       value: |
         ```
 

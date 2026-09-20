@@ -1,23 +1,49 @@
-import database from "../../utils/database.js";
-import Command from "../../classes/command.js";
+import process from "node:process";
+import Command from "#cmd-classes/command.js";
 
 class PrefixCommand extends Command {
   async run() {
-    if (!this.message.channel.guild) return "This command only works in servers!";
-    const guild = await database.getGuild(this.message.channel.guild.id);
+    if (!this.guild)
+      return this.getString("commands.responses.prefix.current", {
+        params: {
+          prefix: process.env.PREFIX ?? "&",
+        },
+      });
+    const guild = await this.database?.getGuild(this.guild.id);
     if (this.args.length !== 0) {
-      const owners = process.env.OWNER.split(",");
-      if (!this.message.member.permissions.has("administrator") && !owners.includes(this.message.member.id)) return "You need to be an administrator to change the bot prefix!";
-      await database.setPrefix(this.args[0], this.message.channel.guild);
-      return `The prefix has been changed to ${this.args[0]}.`;
-    } else {
-      return `The current prefix is \`${guild.prefix}\`.`;
+      if (!this.database) {
+        return this.getString("commands.responses.prefix.stateless");
+      }
+      const owners = process.env.OWNER?.split(",") ?? [];
+      if (!this.memberPermissions.has("ADMINISTRATOR") && !owners.includes(this.author.id)) {
+        this.success = false;
+        return this.getString("commands.responses.prefix.adminOnly");
+      }
+      await this.database.setPrefix(this.args[0], this.guild.id);
+      return this.getString("commands.responses.prefix.changed", {
+        params: {
+          prefix: this.args[0],
+        },
+      });
     }
+    return this.getString("commands.responses.prefix.current", {
+      params: {
+        prefix: guild?.prefix ?? process.env.PREFIX ?? "&",
+      },
+    });
   }
 
   static description = "Checks/changes the server prefix";
   static aliases = ["setprefix", "changeprefix", "checkprefix"];
-  static arguments = ["{prefix}"];
+  static flags = [
+    {
+      name: "prefix",
+      type: "string",
+      description: "The server prefix you want to use",
+      classic: true,
+    },
+  ];
+  static slashAllowed = false;
 }
 
 export default PrefixCommand;

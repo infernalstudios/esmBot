@@ -1,36 +1,55 @@
-import { clean } from "../../utils/misc.js";
-import * as util from "util";
-import { exec as baseExec } from "child_process";
-const exec = util.promisify(baseExec);
-import Command from "../../classes/command.js";
+import { Buffer } from "node:buffer";
+import { exec as baseExec } from "node:child_process";
+import process from "node:process";
+import { promisify } from "node:util";
+import Command from "#cmd-classes/command.js";
+import { clean } from "#utils/misc.js";
+const exec = promisify(baseExec);
 
 class ExecCommand extends Command {
   async run() {
-    const owners = process.env.OWNER.split(",");
-    if (!owners.includes(this.message.author.id)) return "Only the bot owner can use exec!";
-    const code = this.args.join(" ");
+    const owners = process.env.OWNER?.split(",") ?? [];
+    if (!owners.includes(this.author.id)) {
+      this.success = false;
+      return this.getString("commands.responses.exec.botOwnerOnly");
+    }
+    await this.acknowledge();
+    const code = this.getOptionString("cmd") ?? this.args.join(" ");
     try {
       const execed = await exec(code);
-      if (execed.stderr) return `\`ERROR\` \`\`\`xl\n${await clean(execed.stderr)}\n\`\`\``;
-      const cleaned = await clean(execed.stdout);
+      if (execed.stderr) return `\`${this.getString("errorCaps")}\` \`\`\`xl\n${clean(execed.stderr)}\n\`\`\``;
+      const cleaned = clean(execed.stdout);
       const sendString = `\`\`\`bash\n${cleaned}\n\`\`\``;
       if (sendString.length >= 2000) {
         return {
-          text: "The result was too large, so here it is as a file:",
-          file: cleaned,
-          name: "result.txt"
+          content: this.getString("tooLarge"),
+          files: [
+            {
+              contents: Buffer.from(cleaned),
+              name: "result.txt",
+            },
+          ],
         };
-      } else {
-        return sendString;
       }
+      return sendString;
     } catch (err) {
-      return `\`ERROR\` \`\`\`xl\n${await clean(err)}\n\`\`\``;
+      return `\`${this.getString("errorCaps")}\` \`\`\`xl\n${clean(err)}\n\`\`\``;
     }
   }
 
+  static flags = [
+    {
+      name: "cmd",
+      type: "string",
+      description: "The command to execute",
+      classic: true,
+      required: true,
+    },
+  ];
+
   static description = "Executes a shell command";
   static aliases = ["runcmd"];
-  static arguments = ["[command]"];
+  static adminOnly = true;
 }
 
 export default ExecCommand;

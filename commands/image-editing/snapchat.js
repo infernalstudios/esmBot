@@ -1,26 +1,33 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class SnapchatCommand extends ImageCommand {
-  params(url) {
-    const newArgs = this.args.filter(item => !item.includes(url));
-    const position = parseFloat(this.specialArgs.position);
+class SnapchatCommand extends MediaCommand {
+  paramsFunc() {
+    const newArgs = this.getOptionString("text") ?? this.args.join(" ");
+    const position = this.getOptionNumber("position");
     return {
-      caption: newArgs.join(" ").replaceAll("&", "\\&amp;").replaceAll(">", "\\&gt;").replaceAll("<", "\\&lt;").replaceAll("\"", "\\&quot;").replaceAll("'", "\\&apos;").replaceAll("%", "\\%"),
-      pos: isNaN(position) ? 0.5 : position
+      caption: this.clean(newArgs),
+      pos: position == null || Number.isNaN(position) ? 0.565 : position,
     };
+  }
+
+  static init() {
+    super.init();
+    this.addTextParam();
+    this.flags.push({
+      name: "position",
+      type: "number",
+      description: "Set the position of the caption as a decimal (0.0 is top, 1.0 is bottom, default is 0.565)",
+      minValue: 0,
+      maxValue: 1,
+    });
+    return this;
   }
 
   static description = "Adds a Snapchat style caption to an image";
   static aliases = ["snap", "caption3"];
-  static arguments = ["[text]"];
-  static flags = [{
-    name: "position",
-    type: "number",
-    description: "Set the position of the caption as a decimal (0.0 is top, 1.0 is bottom, default is 0.5)"
-  }];
 
-  static requiresText = true;
-  static noText = "You need to provide some text to add a caption!";
+  static requiresParam = true;
+  static noParam = "You need to provide some text to add a caption!";
   static noImage = "You need to provide an image/GIF to add a caption!";
   static command = "snapchat";
 }

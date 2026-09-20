@@ -1,16 +1,28 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class JPEGCommand extends ImageCommand {
-  params() {
-    const quality = parseInt(this.args[0]);
+class JPEGCommand extends MediaCommand {
+  paramsFunc() {
+    const quality = this.getOptionInteger("quality", true) ?? Number.parseInt(this.args[0]);
     return {
-      quality: isNaN(quality) ? 1 : Math.max(1, Math.min(quality, 100))
+      quality: Number.isNaN(quality) ? 1 : Math.max(1, Math.min(quality, 100)),
     };
+  }
+
+  static init() {
+    super.init();
+    this.flags.push({
+      name: "quality",
+      type: "integer",
+      description: "Set the JPEG quality (default: 1)",
+      minValue: 1,
+      maxValue: 100,
+      classic: true,
+    });
+    return this;
   }
 
   static description = "Adds JPEG compression to an image";
   static aliases = ["needsmorejpeg", "jpegify", "magik2", "morejpeg", "jpg", "quality"];
-  static arguments = ["{quality}"];
 
   static noImage = "You need to provide an image/GIF to add more JPEG!";
   static command = "jpeg";

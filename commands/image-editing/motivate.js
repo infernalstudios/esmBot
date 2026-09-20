@@ -1,28 +1,51 @@
-import ImageCommand from "../../classes/imageCommand.js";
-const allowedFonts = ["futura", "impact", "helvetica", "arial", "roboto", "noto", "times"];
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class MotivateCommand extends ImageCommand {
-  params(url) {
-    const newArgs = this.args.filter(item => !item.includes(url));
-    const [topText, bottomText] = newArgs.join(" ").split(/(?<!\\),/).map(elem => elem.trim());
+class MotivateCommand extends MediaCommand {
+  /**
+   * @param {string} text
+   */
+  async criteria(text) {
+    if (typeof text !== "string") return false;
+    const [topText, bottomText] = text.split(/(?<!\\),/).map((elem) => elem.trim());
+    if (topText === "" && (!bottomText || bottomText === "")) return false;
+    return true;
+  }
+
+  paramsFunc() {
+    const newArgs = this.getOptionString("text") ?? this.args.join(" ");
+    const [topText, bottomText] = newArgs.split(/(?<!\\),/).map((elem) => elem.trim());
+    const font = this.getOptionString("font");
     return {
-      top: topText.replaceAll("&", "\\&amp;").replaceAll(">", "\\&gt;").replaceAll("<", "\\&lt;").replaceAll("\"", "\\&quot;").replaceAll("'", "\\&apos;").replaceAll("%", "\\%"),
-      bottom: bottomText ? bottomText.replaceAll("&", "\\&amp;").replaceAll(">", "\\&gt;").replaceAll("<", "\\&lt;").replaceAll("\"", "\\&quot;").replaceAll("'", "\\&apos;").replaceAll("%", "\\%") : "",
-      font: this.specialArgs.font && allowedFonts.includes(this.specialArgs.font.toLowerCase()) ? this.specialArgs.font.toLowerCase() : "times"
+      topText: this.clean(topText),
+      bottomText: bottomText ? this.clean(bottomText) : "",
+      // @ts-expect-error this.constructor allows us to get static properties, but TS interprets it as a pure function
+      font: font && this.constructor.allowedFonts.includes(font.toLowerCase()) ? font.toLowerCase() : "times",
     };
+  }
+
+  static init() {
+    super.init();
+    this.addTextParam();
+    this.flags.push({
+      name: "font",
+      type: "string",
+      choices: (() => {
+        const array = [];
+        for (const font of this.allowedFonts) {
+          array.push({ name: font, value: font });
+        }
+        return array;
+      })(),
+      description: "Specify the font you want to use (default: times)",
+    });
+    return this;
   }
 
   static description = "Generates a motivational poster";
   static aliases = ["motivational", "motiv", "demotiv", "demotivational", "poster", "motivation", "demotivate"];
-  static arguments = ["[top text]", "{bottom text}"];
-  static flags = [{
-    name: "font",
-    type: allowedFonts.join("|"),
-    description: "Specify the font you want to use (default: `times`)"
-  }];
 
-  static requiresText = true;
-  static noText = "You need to provide some text to generate a motivational poster!";
+  static requiresParam = true;
+  static noParam = "You need to provide some text to generate a motivational poster!";
   static noImage = "You need to provide an image/GIF to generate a motivational poster!";
   static command = "motivate";
 }

@@ -1,11 +1,9 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class GrayscaleCommand extends ImageCommand {
-  params() {
-    return {
-      color: "grayscale"
-    };
-  }
+class GrayscaleCommand extends MediaCommand {
+  params = {
+    color: "grayscale",
+  };
 
   static description = "Adds a grayscale filter";
 

@@ -1,33 +1,87 @@
-import Command from "../../classes/command.js";
+import { Member } from "oceanic.js";
+import Command from "#cmd-classes/command.js";
+import { getUser, mentionToObject } from "#utils/mentions.js";
+const imageSize = 4096;
 
 class BannerCommand extends Command {
+  // this command sucks a little bit more again
   async run() {
-    if (this.message.mentions[0]) {
-      return this.message.mentions[0].banner ? this.message.mentions[0].dynamicBannerURL(null, 1024) : "This user doesn't have a banner!";
-    } else if (await this.ipc.fetchUser(this.args[0])) {
-      const user = await this.ipc.fetchUser(this.args[0]);
-      return user.banner ? this.client._formatImage(`/banners/${user.id}/${user.banner}`, null, 1024) : "This user doesn't have a banner!";
-    } else if (this.args[0] && this.args[0].match(/^<?[@#]?[&!]?\d+>?$/) && this.args[0] >= 21154535154122752n) {
-      try {
-        const user = await this.client.getRESTUser(this.args[0]);
-        return user.banner ? this.client._formatImage(`/banners/${user.id}/${user.banner}`, null, 1024) : "This user doesn't have a banner!";
-      } catch {
-        return this.message.author.banner ? this.message.author.dynamicBannerURL(null, 1024) : "You don't have a banner!";
-      }
-    } else if (this.args.join(" ") !== "" && this.message.channel.guild) {
-      const userRegex = new RegExp(this.args.join("|"), "i");
-      const member = this.message.channel.guild.members.find(element => {
-        return userRegex.test(element.nick) ?? userRegex.test(element.username);
-      });
-      return member && member.user.banner ? member.user.dynamicBannerURL(null, 1024) : (this.message.author.banner ? this.message.author.dynamicBannerURL(null, 1024) : "This user doesn't have a banner!");
-    } else {
-      return this.message.author.banner ? this.message.author.dynamicBannerURL(null, 1024) : "You don't have a banner!";
+    const member = this.getOptionMember("member") ?? this.getOptionUser("member") ?? this.args[0];
+    const server = !!this.getOptionBoolean("server");
+    const self =
+      server && this.guild
+        ? await this.client.rest.guilds.getMember(this.guild.id, this.author.id)
+        : await this.client.rest.users.get(this.author.id); // banners are only available over REST
+    if (this.type === "classic" && this.message?.mentions.users[0]) {
+      return (
+        (server && this.guild
+          ? await this.client.rest.guilds.getMember(this.guild.id, this.message.mentions.members[0].id)
+          : await this.client.rest.users.get(this.message.mentions.users[0].id)
+        )?.bannerURL(undefined, imageSize) ??
+        self.bannerURL(undefined, imageSize) ??
+        this.getString("commands.responses.banner.noUserBanner")
+      );
     }
+    if (member && typeof member !== "string") {
+      let restMember;
+      if (member instanceof Member && server && this.guild) {
+        restMember = await this.client.rest.guilds.getMember(this.guild.id, member.id);
+      } else {
+        restMember = await this.client.rest.users.get(member.id);
+      }
+      return (
+        restMember.bannerURL(undefined, imageSize) ??
+        self.bannerURL(undefined, imageSize) ??
+        this.getString("commands.responses.banner.noUserBanner")
+      );
+    }
+    if (member) {
+      const user = await mentionToObject(this.client, member, "user", {
+        guild: this.guild,
+        server,
+        rest: true,
+      });
+      if (user?.banner)
+        return (
+          user.bannerURL(undefined, imageSize) ??
+          self.bannerURL(undefined, imageSize) ??
+          this.getString("commands.responses.banner.noUserBanner")
+        );
+    }
+    if (this.args.join(" ") !== "" && this.guild) {
+      const searched = await this.guild.searchMembers({
+        query: this.args.join(" "),
+        limit: 1,
+      });
+      if (searched.length > 0) {
+        const user = await getUser(this.client, this.guild, searched[0].user.id, server, true);
+        return (
+          user.bannerURL(undefined, imageSize) ??
+          self.bannerURL(undefined, imageSize) ??
+          this.getString("commands.responses.banner.noUserBanner")
+        );
+      }
+    }
+    return self.bannerURL(undefined, imageSize) ?? this.getString("commands.responses.banner.noSelfBanner");
   }
 
   static description = "Gets a user's banner";
   static aliases = ["userbanner"];
-  static arguments = ["{mention/id}"];
+  static flags = [
+    {
+      name: "member",
+      type: "user",
+      description: "The member to get the banner from",
+      classic: true,
+    },
+    {
+      name: "server",
+      type: "boolean",
+      description: "Gets a user's server banner",
+      classic: true,
+      default: false,
+    },
+  ];
 }
 
 export default BannerCommand;

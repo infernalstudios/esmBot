@@ -1,33 +1,60 @@
-import Command from "../../classes/command.js";
+import { Member } from "oceanic.js";
+import Command from "#cmd-classes/command.js";
+import { getUser, mentionToObject } from "#utils/mentions.js";
+const imageSize = 512;
 
 class AvatarCommand extends Command {
   async run() {
-    if (this.message.mentions[0]) {
-      return this.message.mentions[0].dynamicAvatarURL(null, 1024);
-    } else if (await this.ipc.fetchUser(this.args[0])) {
-      const user = await this.ipc.fetchUser(this.args[0]);
-      return user.avatar ? this.client._formatImage(`/avatars/${user.id}/${user.avatar}`, null, 1024) : `https://cdn.discordapp.com/embed/avatars/${user.discriminator % 5}.png`; // hacky "solution"
-    } else if (this.args[0] && this.args[0].match(/^<?[@#]?[&!]?\d+>?$/) && this.args[0] >= 21154535154122752n) {
-      try {
-        const user = await this.client.getRESTUser(this.args[0]);
-        return user.avatar ? this.client._formatImage(`/avatars/${user.id}/${user.avatar}`, null, 1024) : `https://cdn.discordapp.com/embed/avatars/${user.discriminator % 5}.png`; // repeat of hacky "solution" from above
-      } catch {
-        return this.message.author.dynamicAvatarURL(null, 1024);
-      }
-    } else if (this.args.join(" ") !== "" && this.message.channel.guild) {
-      const userRegex = new RegExp(this.args.join("|"), "i");
-      const member = this.message.channel.guild.members.find(element => {
-        return userRegex.test(element.nick) ? userRegex.test(element.nick) : userRegex.test(element.username);
-      });
-      return member ? member.user.dynamicAvatarURL(null, 1024) : this.message.author.dynamicAvatarURL(null, 1024);
+    const member = this.getOptionMember("member") ?? this.getOptionUser("member") ?? this.args[0];
+    const server = !!this.getOptionBoolean("server");
+    let self;
+    if (server && this.guild) {
+      self = this.member ?? this.author;
     } else {
-      return this.message.author.dynamicAvatarURL(null, 1024);
+      self = this.author;
     }
+    if (this.type === "classic" && this.message?.mentions.users[0])
+      return (this.message.mentions.members[0] ?? this.message.mentions.users[0])?.avatarURL(undefined, imageSize);
+    if (member && typeof member !== "string") {
+      return (member instanceof Member && !server ? member.user : member).avatarURL(undefined, imageSize);
+    }
+    if (member) {
+      const user = await mentionToObject(this.client, member, "user", {
+        guild: this.guild,
+        server,
+      });
+      if (user) return user.avatarURL(undefined, imageSize);
+    }
+    if (this.args.join(" ") !== "" && this.guild) {
+      const searched = await this.guild.searchMembers({
+        query: this.args.join(" "),
+        limit: 1,
+      });
+      if (searched.length > 0) {
+        const user = await getUser(this.client, this.guild, searched[0].user.id, server);
+        if (user) return user.avatarURL(undefined, imageSize);
+      }
+    }
+    return self.avatarURL(undefined, imageSize);
   }
 
   static description = "Gets a user's avatar";
   static aliases = ["pfp", "ava"];
-  static arguments = ["{mention/id}"];
+  static flags = [
+    {
+      name: "member",
+      type: "user",
+      description: "The member to get the avatar from",
+      classic: true,
+    },
+    {
+      name: "server",
+      type: "boolean",
+      description: "Gets a user's server avatar",
+      classic: true,
+      default: false,
+    },
+  ];
 }
 
 export default AvatarCommand;

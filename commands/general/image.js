@@ -1,44 +1,110 @@
-import paginator from "../../utils/pagination/pagination.js";
-import { readFileSync } from "fs";
-const { searx } = JSON.parse(readFileSync(new URL("../../servers.json", import.meta.url)));
-import { random } from "../../utils/misc.js";
-import fetch from "node-fetch";
-import Command from "../../classes/command.js";
+import Command from "#cmd-classes/command.js";
+import serversConfig from "#config/servers.json" with { type: "json" };
+import paginator from "#pagination";
+import logger from "#utils/logger.js";
+import { random } from "#utils/misc.js";
 
 class ImageSearchCommand extends Command {
   async run() {
-    if (this.message.channel.guild && !this.message.channel.permissionsOf(this.client.user.id).has("embedLinks")) return "I don't have the `Embed Links` permission!";
-    if (this.args.length === 0) return "You need to provide something to search for!";
-    this.client.sendChannelTyping(this.message.channel.id);
+    this.success = false;
+    if (!this.permissions.has("EMBED_LINKS")) return this.getString("permissions.noEmbedLinks");
+    const query = this.getOptionString("query") ?? this.args.join(" ");
+    if (!query || !query.trim()) return this.getString("commands.responses.image.noInput");
+    await this.acknowledge();
     const embeds = [];
-    const rawImages = await fetch(`${random(searx)}/search?format=json&safesearch=2&categories=images&q=!goi%20!ddi%20${encodeURIComponent(this.args.join(" "))}`).then(res => res.json());
-    if (rawImages.results.length === 0) return "I couldn't find any results!";
-    const images = rawImages.results.filter((val) => !val.img_src.startsWith("data:"));
+    let server = random(serversConfig.search);
+    if (!server) {
+      if (!serversConfig.searx && serversConfig.searx.length === 0)
+        return this.getString("commands.responses.image.noEngines");
+      logger.warn('!!! THE "searx" FIELD IN config/servers.json IS DEPRECATED !!!');
+      logger.warn(
+        'The "searx" field has been renamed to "search" and has a different format. Please update your config; esmBot will no longer read this field in a future version.',
+      );
+      server = {
+        type: "searxng",
+        url: random(serversConfig.searx),
+      };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 6000);
+    /**
+     * @type {import("#utils/types.ts").SearXNGResults}
+     */
+    const rawImages = await fetch(
+      new URL(
+        server.type === "degoog"
+          ? `/api/search?format=json&safeMode=on&type=images&q=${encodeURIComponent(query)}`
+          : `/search?format=json&safesearch=2&engines=${server.engines.map((e) => encodeURIComponent(e)).join(",")}&q=${encodeURIComponent(query)}`,
+        server.url,
+      ),
+      {
+        signal: controller.signal,
+      },
+    ).then((res) => res.json());
+    clearTimeout(timeout);
+    if (rawImages.results.length === 0) return this.getString("commands.responses.image.noResults");
+    const images = rawImages.results
+      .map((val) => {
+        if (!val.img_src) return;
+        if (!val.url.startsWith("https://")) return;
+        const canonURL =
+          server.type === "degoog" ? new URL(val.img_src, server.url).searchParams.get("url") : val.img_src;
+        if (!canonURL.startsWith("https://")) return;
+        return {
+          img_src: canonURL,
+          title: val.title,
+          url: val.url,
+        };
+      })
+      .filter(Boolean);
     for (const [i, value] of images.entries()) {
       embeds.push({
-        embeds: [{
-          title: "Search Results",
-          color: 16711680,
-          footer: {
-            text: `Page ${i + 1} of ${images.length}`
+        embeds: [
+          {
+            title: value.title,
+            url: value.url,
+            color: 0xff0000,
+            footer: {
+              text: this.getString("pagination.page", {
+                params: {
+                  page: (i + 1).toString(),
+                  amount: images.length.toString(),
+                },
+              }),
+            },
+            image: {
+              url: value.img_src,
+            },
+            author: {
+              name: this.getString("commands.responses.image.results"),
+              iconURL: this.client.user.avatarURL(),
+            },
           },
-          description: value.title,
-          image: {
-            url: encodeURI(value.img_src)
-          },
-          author: {
-            name: this.message.author.username,
-            icon_url: this.message.author.avatarURL
-          }
-        }]
+        ],
       });
     }
-    return paginator(this.client, this.message, embeds);
+    this.success = true;
+    return paginator(
+      this.client,
+      { message: this.message, interaction: this.interaction, author: this.author },
+      embeds,
+    );
   }
+
+  static flags = [
+    {
+      name: "query",
+      type: "string",
+      description: "The query you want to search for",
+      classic: true,
+      required: true,
+    },
+  ];
 
   static description = "Searches for images across the web";
   static aliases = ["im", "photo", "img"];
-  static arguments = ["[query]"];
 }
 
 export default ImageSearchCommand;

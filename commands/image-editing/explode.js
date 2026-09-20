@@ -1,15 +1,15 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class ExplodeCommand extends ImageCommand {
+class ExplodeCommand extends MediaCommand {
   params = {
-    amount: -1
+    mapName: "linearexplode.png",
   };
 
   static description = "Explodes an image";
   static aliases = ["exp"];
 
   static noImage = "You need to provide an image/GIF to explode!";
-  static command = "explode";
+  static command = "distort";
 }
 
 export default ExplodeCommand;

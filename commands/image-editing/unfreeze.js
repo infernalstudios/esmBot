@@ -1,13 +1,13 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import MediaCommand from "#cmd-classes/mediaCommand.js";
 
-class UnfreezeCommand extends ImageCommand {
+class UnfreezeCommand extends MediaCommand {
   params = {
-    loop: true
+    loop: true,
   };
 
   static description = "Unfreezes an image sequence";
 
-  static requiresGIF = true;
+  static alwaysGIF = true;
   static noImage = "You need to provide an image/GIF to unfreeze!";
   static command = "freeze";
 }
