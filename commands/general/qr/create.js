@@ -3,6 +3,7 @@ import MediaCommand from "#cmd-classes/mediaCommand.js";
 const textEncoder = new TextEncoder();
 
 class QrCreateCommand extends MediaCommand {
+  /** @param {string} text */
   async criteria(text) {
     if (textEncoder.encode(text).length > 2952) return false;
     return true;
@@ -24,7 +25,7 @@ class QrCreateCommand extends MediaCommand {
   static description = "Generates a QR code";
   static aliases = ["qrcreate"];
 
-  static requiresImage = false;
+  static requiresMedia = false;
   static requiresParam = true;
   static noParam = "You need to provide some text to generate a QR code!";
   static command = "qrcreate";

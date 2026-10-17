@@ -1,6 +1,5 @@
 #include "worker.h"
 #include "../image/common.h"
-#include <exception>
 
 using namespace std;
 
@@ -23,7 +22,7 @@ void MediaAsyncWorker::Execute() {
         }
 
         int curSize = size - 16;
-        while (curSize > 0) {
+        while (curSize >= 4) {
           if (memcmp(bufData + size - curSize, "avis", 4) == 0) {
             outType = "avis";
             outData = {nullptr, 0};
@@ -43,6 +42,10 @@ void MediaAsyncWorker::Execute() {
     SetError(e.what());
   }
 
+  EndCleanup();
+}
+
+void MediaAsyncWorker::EndCleanup() {
   vips_error_clear();
   vips_thread_shutdown();
 }

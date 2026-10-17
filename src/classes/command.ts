@@ -21,7 +21,7 @@ import {
 } from "oceanic.js";
 import { getString } from "#utils/i18n.js";
 import { cleanInteraction, cleanMessage } from "#utils/misc.js";
-import type { CommandType, ExtendedConstructedCommandOptions } from "#utils/types.js";
+import type { CommandFlag, CommandType } from "#utils/types.js";
 import type { DatabasePlugin } from "../database.ts";
 
 type CommandOptionsClassic = {
@@ -141,6 +141,30 @@ class Command {
    */
   async finalize(_res?: Message) {}
 
+  /**
+   * Replies to the message or interaction that invoked the command.
+   */
+  async reply(
+    content: InteractionContent | CreateMessageOptions,
+    options: { ephemeral?: boolean; mention?: boolean } = {},
+  ): Promise<Message> {
+    if (this.interaction) {
+      const res = await this.interaction.createFollowup({
+        flags: options.ephemeral ? 64 : 0,
+        ...(content as InteractionContent),
+      });
+      return res.message;
+    }
+    if (this.message && this.reference) {
+      return this.client.rest.channels.createMessage(this.message.channelID, {
+        ...(content as CreateMessageOptions),
+        ...this.reference,
+        allowedMentions: { repliedUser: options.mention ?? false },
+      });
+    }
+    throw Error("Unknown command type");
+  }
+
   async acknowledge() {
     if (this.type === "classic" && this.message) {
       await this.client.rest.channels.sendTyping(this.message.channelID);
@@ -196,9 +220,20 @@ class Command {
     throw Error("Unknown command type");
   }
 
+  private clampClassicOption(key: string, value: number) {
+    if (!Number.isFinite(value)) return Number.NaN;
+    const flag = (this.constructor as typeof Command).flags.find((f) => f.name === key);
+    if (flag?.minValue !== undefined) value = Math.max(flag.minValue, value);
+    if (flag?.maxValue !== undefined) value = Math.min(flag.maxValue, value);
+    return value;
+  }
+
   getOptionNumber(key: string, defaultArg?: boolean): number | undefined {
     if (this.type === "classic") {
-      return Number.parseFloat((defaultArg ? this.args.join(" ").trim() : this.options?.[key]) as string);
+      return this.clampClassicOption(
+        key,
+        Number.parseFloat((defaultArg ? this.args.join(" ").trim() : this.options?.[key]) as string),
+      );
     }
     if (this.type === "application") {
       return this.interaction?.data.options.getNumber(key);
@@ -208,7 +243,10 @@ class Command {
 
   getOptionInteger(key: string, defaultArg?: boolean): number | undefined {
     if (this.type === "classic") {
-      return Number.parseInt((defaultArg ? this.args.join(" ").trim() : this.options?.[key]) as string);
+      return this.clampClassicOption(
+        key,
+        Number.parseInt((defaultArg ? this.args.join(" ").trim() : this.options?.[key]) as string),
+      );
     }
     if (this.type === "application") {
       return this.interaction?.data.options.getInteger(key);
@@ -276,7 +314,7 @@ class Command {
 
   static description = "No description found";
   static aliases: string[] = [];
-  static flags: ExtendedConstructedCommandOptions[] = [];
+  static flags: CommandFlag[] = [];
   static ephemeral = false;
   static dbRequired = false;
   static slashAllowed = true;
